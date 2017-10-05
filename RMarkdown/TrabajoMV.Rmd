@@ -1,0 +1,27 @@
+---
+title: "Trabajo Multivariado"
+subtitle: "Parcial 2"
+author: "Ana María López - Pedro Pablo Villegas"
+date: "Octubre, 2017"
+citation_package: natbib
+bibliography: TrabajoMV.bib
+biblio-style: apalike
+output: pdf_document
+---
+
+```{r load myData, include=FALSE}
+# Estructura de Directorios
+dir.principal  <- '../'
+dir.funciones  <- '../RScripts'
+dir.markdown  <- '../RMarkdown'
+dir.input      <- '../Data/In/'
+dir.output     <- '../Data/Out/'
+load(paste(dir.principal,"Multivariado.RData",sep=""))
+```
+
+## Punto 4.28
+Considere los datos dados en la tabla 1.5 de polución del aire.  Construya una grafica Q-Q para las medidas de radiación solar y lleve a cabo un test de normalidad basado en el coeficiente de correlacion $r_{Q}$.  Defina $\alpha=0.05$ y use la entrada correspondiente a $n=40$ en la tabla 4.2
+```{r setup, include=FALSE}
+data <- read.table(paste(dir.input,"T4-5.DAT",sep=""),header=FALSE)
+colnames(data) <- "Radiation"
+```
