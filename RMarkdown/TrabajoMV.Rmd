@@ -10,18 +10,672 @@ output: pdf_document
 ---
 
 ```{r load myData, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
 # Estructura de Directorios
 dir.principal  <- '../'
 dir.funciones  <- '../RScripts'
 dir.markdown  <- '../RMarkdown'
 dir.input      <- '../Data/In/'
 dir.output     <- '../Data/Out/'
+library(car) # Transformación de poder
+library(ggplot2) # Gráficas
+library(dplyr) # Manejo de datos, ggplot2 trabaja mejor con dplyr
+library(tibble) # Caso especial de un data.frame
+library(MVN) # Pruebas de normalidad multivariada
+# Multiple plot function
+#
+# ggplot objects can be passed in ..., or to plotlist (as a list of ggplot objects)
+# - cols:   Number of columns in layout
+# - layout: A matrix specifying the layout. If present, 'cols' is ignored.
+#
+# If the layout is something like matrix(c(1,2,3,3), nrow=2, byrow=TRUE),
+# then plot 1 will go in the upper left, 2 will go in the upper right, and
+# 3 will go all the way across the bottom.
+#
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  library(grid)
+  
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+  
+  numPlots = length(plots)
+  
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                     ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+  
+  if (numPlots==1) {
+    print(plots[[1]])
+    
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+    
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+      
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
 load(paste(dir.principal,"Multivariado.RData",sep=""))
 ```
+## INTRODUCCIÓN
+El supuesto de normalidad esta siempre presente en los análisis estadisticos sea univariado o multivariado.  Métodos univariados como: análisis de varianza (ANOVA), regresión lineal, entre otros, se basan en la distribución normal, adicionalmente técnicas estadísticas multivariantes como: análisis multivariado de varianza (MANOVA), análisis de componentes principales (PCA), análisis de discriminantes y otros, se basan en el supuesto de normalidad multivariante para hacer inferencias. Estas suposiciones requieren un conjunto de datos sobre los cuales una prueba estadística de la significancia sea aproximadamente distribuido de manera normal. Por lo tanto es importante contar con técnicas que permitan comprobar este supuesto.  Para muestras grandes no es de gran preocupación por el teorema del límite central, el cual indica que la distribución de las medias sigue aproximadamente una distribución normal.[@Oppong2016]
 
-## Punto 4.28
-Considere los datos dados en la tabla 1.5 de polución del aire.  Construya una grafica Q-Q para las medidas de radiación solar y lleve a cabo un test de normalidad basado en el coeficiente de correlacion $r_{Q}$.  Defina $\alpha=0.05$ y use la entrada correspondiente a $n=40$ en la tabla 4.2
-```{r setup, include=FALSE}
-data <- read.table(paste(dir.input,"T4-5.DAT",sep=""),header=FALSE)
-colnames(data) <- "Radiation"
+Si bien se cuentan con técnicas para poder determinar si se cumple o no la hipótesis de normalidad, es importante conocer que se debe hacer cuando esta hipótesis es rechazada, para estos casos existen tipos de transformación de datos que puede llegar a hacer estos aproximadamente normales, de tal manera que los métodos estándar sean aplicables [@Pena2016]. Un tipo de transformación es el enfoque de Box y Cox, estos modificaron la familia de transformaciones sugerida por Tukey (1957), teniendo en cuenta la discontinuidad en $\lambda=0$ tal que: $\\$
+$$y^\lambda_i=\begin{cases} \begin{matrix} (y^\lambda_i-1)/\lambda; \lambda \neq 0 \\ log(y_i); \lambda=0 \end{matrix}   & 
+\end{cases}$$
+$\\$
+Esta transformación es valida para $y_i>0$, si se tienen observaciones negativas se han realizado otras modificaciones a la transformación de Box y Cox.[@Sakia1992]
+
+En el presente trabajo se realizan unos ejercicios que abarcan problema de evaluar la normalidad en casos univariados y multivariados, usando herramientas de análisis de graficos Q-Q, pruebas de Shapiro, transformaciones de poder Box Cox para transformar datos no normales a normales, entre otros.
+
+## EJERCICIOS PROPUESTOS
+### Punto 4.28
+Considere los datos dados en la tabla 1.5 de polución del aire. Construya una grafica Q-Q para las medidas de radiación solar y lleve a cabo un test de normalidad basado en el coeficiente de correlacion $r_Q$.  Defina $\alpha=0.05$ y use la entrada correspondiente a $n=40$ en la tabla 4.2.
+\centerline{\includegraphics[height=4in]{Tabla1.5.png}}
+Se toman los datos de la radiación solar los cuales son todos positivos y se construye la grafica Q-Q teniendo el siguiente resultado:
+```{r ,  fig.width=5, fig.height=5, fig.align='center', echo=FALSE}
+data <- read.table(paste(dir.input,"T1-5.dat",sep=""))$V2
+qq <- qqnorm(data)
+qqline(data,col="red")
 ```
+En el grafico Q-Q se evidencia que los datos podrían no provenir de una distribución normal, los puntos de la izquierda sugieren observaciones atípicas, pues estan muy lejos del resto de los datos y los puntos de la derecha tambien se alejan de la linea, estos puntos extremos también nos sugieren unas colas más pesadas que la distribución normal, por lo tanto con este grafico podría sugerirse que los datos de la medida de la radiación solar no se distribuyen normal.
+\centerline{\includegraphics[height=4in]{Tabla4.2.png}}
+Para confirmar esto se calcula el coeficiente de correlación $r_Q$ el cual da como resultado $r_Q=0.9693$, este valor es menor comparado con el punto critico de la forma correspondiente a la muestra de tamaño $n=40$ de la tabla 4.2 el cual es $0.9726$, por lo tanto este test sugiere rechazar la hipotesis nula de normalidad con un nivel de significancia $\alpha=0.05$. 
+```{r , echo=FALSE}
+cor(qq$x,qq$y)
+```
+Otro test que puede emplearse es el test de Shapiro, este nos arroja un $p-value$ que nos permite definir si cumple o no la hipotesis de normalidad, en este caso el test de Shapiro-Wilk nos da un $p-value=0.0262$ el cual es menor que el nivel de significancia $\alpha=0.05$, por lo tanto nuevamente obtenemos que se debería rechazar la hipotesis de normalidad.
+```{r , echo=FALSE}
+shapiro.test(data)
+```
+### Punto 4.29
+Dado los datos de la polución del aire de la tabla 1.5, examine los pares $X_5 = NO_2$ y $X_6 = O_3$ para normalidad bivariada.
+
+* Calcule la distancia estadistica $(x_j-\bar{x})'S^{-1}(x_j-\bar{x})$, $j=1,2,...,42$, donde $x_j'=[x_{j5},x_{j6}]$. $\\$
+Se realiza el calculo de la distancia estadistica mahalanobis, obteniendo el siguiente resultado:
+```{r , echo=FALSE}
+no2 <- read.table(paste(dir.input,"T1-5.dat",sep=""))$V5
+o3 <- read.table(paste(dir.input,"T1-5.dat",sep=""))$V6
+data <- cbind(no2, o3)
+n <- 42
+#mean
+one <- matrix(rep(1, n), n, 1)
+xbar <- 1/n*t(data)%*%one
+#var-covar matrix
+varcov <- 1/(n-1)*t(data)%*%(diag(n)-(1/n)*one%*%t(one))%*%data
+sqdist <- mahalanobis(data, xbar, varcov)
+sqsortdist <- sort(sqdist)
+sqsortdist
+```
+
+* Determine la proporción de observaciones $x_j'=[x_{j5},x_{j6}]$, $j=1,2,...,42$, que caen entre el $50\%$ del contorno de probabilidad de una distribución normal bivariada.  $\\$
+Se realiza el calculo de la proporción de observaciones que caen en el  $50\%$ del contorno de probabilidad de una distribución bivariada, el resultado obtenido es:
+```{r , echo=FALSE}
+#Test
+qcp <- qchisq(0.5, 2)
+test <- NULL
+for(i in 1:length(sqsortdist))
+  ifelse(sqsortdist[i]<=qcp,test[i]<-1,test[i]<-0)
+prop.normality.test <- mean(test)
+prop.normality.test
+```
+$61.90\%$ de las observaciones cae entre el $50\%$ del contorno de probabilidad de una distribucion normal bivariada, se espera que las observaciones sean muy cercanas al $50\%$, sin embargo hay un $11.9\%$ porciento más de observaciones, podríamos pensar que no son normal bivariada, para afirmar esto se construirá el grafico $\chi^2$. $\\$
+
+* Construya un grafico $\chi^2$ de las distancias ordenadas del primer punto. $\\$
+```{r ,  fig.width=5, fig.height=5, fig.align='center', echo=FALSE}
+qqchi <- roystonTest(data, qqplot = T)
+```
+En el gráfico $\chi^2$ se evidencia que los datos no siguen un patrón de linea recta, adicional podemos evidenciar datos atipicos, es decir que nuevamente nos encontramos con que los datos no distribuyen normal bivariado. Por ultimo el Royston test nos confirma el resultado.
+```{r ,   echo=FALSE}
+qqchi
+```
+### Punto 4.30
+Considere los datos del carro usado del ejercicio 4.26.
+
+```{r , echo=FALSE}
+x1 <- c(1,2,3,3,4,5,6,8,9,11)
+x1
+x2 <- c(18.95,19.00,17.95,15.54,14.00,12.95,8.94,7.49,6.00,3.99)
+x2
+```
+
+* Determine la transformación de poder para $\widehat{\lambda}_{1}$ que hace los valores $x_1$ aproximadamente normales. Construya una grafica Q-Q para los datos transformados. $\\$
+Para el calculo del $\lambda$ usamos la transformación de poder Box Cox, la cual nos permite graficamente mirar que valor de $\lambda$ podría usarse para realizar la transformación de los datos.
+```{r , fig.width=5, fig.height=5, fig.align='center', echo=FALSE}
+#install.packages("car")
+bc1 <- boxCox(x1~1)
+```
+$\\$
+El valor de $\lambda$ que sugiere la transformación de poder es $\lambda_1=0.3709$, por lo tanto se procede a realizar la transformacion de los datos usando este valor y teniendo en cuenta que es diferente de cero.
+```{r , echo=FALSE}
+summary(a1 <- powerTransform(x1~1))
+lambda1 <- a1$lambda
+#lambda1 <- 0.5
+```
+Se construyen los graficos Q-Q de la distribucion de $x_1$ (Gráfico de la izquierda) y de la distribución transformada $\frac{x_1^{\lambda_1}-1}{\lambda_1}$ por ser $\lambda\neq0$ (Gráfico de la derecha). $\\$
+```{r , fig.width=5, fig.height=5, fig.align='center', echo=FALSE}
+par(mfrow=c(1,2))
+qqn <- qqnorm(x1)
+qqline(x1,col="red")
+qqt <- qqnorm((x1^lambda1-1)/lambda1)
+qqline((x1^lambda1-1)/lambda1,col="blue")
+```
+En los datos transformados las observaciones se aproximan mas a la linea, sin embargo no es una diferencia significativa, se realiza la prueba de Shapiro para los datos no transformados:
+```{r , echo=FALSE}
+shapiro.test(x1)
+```
+Adicional a esto se realiza este mismo test con los datos transformados:
+```{r , echo=TRUE}
+shapiro.test((x1^lambda1-1)/lambda1)
+```
+De los resultados podemos concluir que transformar los datos no sería necesario, ya que encontramos en la prueba de shapiro que se puede aceptar la hipotesis nula de normalidad en ambos casos, teniendo un $p-value=0.963$ para los datos transformados y un $p-value=0.6465$ para los datos no transformados.
+
+* Determine la transformación de poder para $\widehat{\lambda}_{2}$ que hace los valores $x_2$ aproximadamente normales. Construya una grafica Q-Q para los datos transformados. $\\$
+
+Para $x_2$ realizamos el mismo procedimiento del punto anterior.
+```{r ,   fig.width=5, fig.height=5, fig.align='center',  echo=FALSE}
+bc2 <- boxCox(x2~1)
+```
+$\\$
+Esta función nos devuelve información del máximo $\lambda$, siendo en esta caso $\lambda_2=0.9362$
+```{r , echo=FALSE}
+summary(a2 <- powerTransform(x2~1))
+lambda2 <- a2$lambda
+```
+Este $\lambda_2=0.9362$ es muy cercada a 1, asi que no se necesita realizar ninguna transformación a los datos $x_2$ ya que estos podrían ser aproximadamente normales.  Sin embargo se construye el grafico Q-Q para $x_2$ con los datos normales y transformados y no se encuentra ninguna diferencia.
+```{r , fig.width=5, fig.height=5, fig.align='center', echo=FALSE}
+par(mfrow=c(1,2))
+qqnorm(x2)
+qqline(x2,col="red")
+qqnorm((x2^lambda2-1)/lambda2)
+qqline((x2^lambda2-1)/lambda2,col="blue")
+```
+Adicional se realiza la prueba de Shapiro para los datos brutos y los transformados:
+```{r , echo=TRUE}
+shapiro.test(x2)
+shapiro.test((x2^lambda2-1)/lambda2)
+
+```
+En este caso no se evidencia cambio significativo en la prueba por lo cual se concluye que no es necesario realizar una transformación de los datos.
+
+* Determine la transformación de poder para $\widehat{\lambda}'=[\widehat{\lambda}_1,\widehat{\lambda}_2]$ que hace los valores $[x_1,x_2]$ normal conjunta usando (4-40). Compare los resultados obtenidos en los puntos 1 y 2.
+Realizamos el mismo procedimiento de los puntos anteriores con la variante de trabajar con una multivariada.
+```{r , echo=FALSE}
+x <- cbind(x1,x2)
+bc <- powerTransform(x~1)
+summary(bc)
+```
+Tener las distribuciones marginales normales, no significa que la distribución conjunta sea de forma normal.  Por la transformacion de Box-Cox, encontramos que los $\widehat{\lambda}'=[1.2732,0.0310]$ son diferentes a los hallados en los puntos anteriores.  Si consideramos el gráfico de contorno, se puede encontrar que $(0.3709,0.9362)$ también caen en la región superior, esto significa que $(0.3709,0.9362)$ podría ser una buena opción también.
+```{r , fig.width=5, fig.height=5, fig.align='center', echo=FALSE}
+daticos<-c(1,2,3,3,4,5,6,8,9,11)
+daticos1<-c(18.95,19.00,17.95,15.54,14.00,12.95,8.94,7.49,6.00,3.99)
+a<-powerTransform(cbind(daticos, daticos1))
+ma<-matrix(0:0,ncol=length(seq(-1,3,0.05)),nrow=length(seq(-1,3,0.05)))
+x<-seq(-1,3,0.05)
+y<-seq(-2,2,0.05)
+verosimi<- function(daticos,daticos1,l1,l2){
+  x<-cbind((daticos^l1-1)/l1, (daticos1^l2-1)/l2)
+  one<-matrix(rep(1, 10), 10, 1)
+  varcov<-1/9*t(x)%*%(diag(10)-(1/10)*one%*%t(one))%*%x
+  return(-5*log(det(varcov))+(l1-1)*sum(log(daticos))+(l2-1)*sum(log(daticos1)))
+}
+for (i in 1:length(x)){
+  for(j in 1:length(y)){
+   ma[i,j]<-verosimi(daticos,daticos1,x[i],y[j])
+}
+}
+contour(x,y,ma)
+abline(v=1.27)
+abline(h=0.03)
+```
+
+### Punto 4.34
+Examine los datos sobre el contenido mineral oseo de la tabla 1.8 para marginale y bivariada normalidad.
+
+Sabemos que si un vector aleatorio X distribuye normal multivariado, cualquier subgrupo o combinación de los elementos de este, distibuyen normal, incluso sus distribuciones univariadas son normales. Por lo que la estrategia para evaluar la normalidad de los datos de la tabla 1.8 será evaluar primero la normalidad de las distribuciones marginales y luego la normalidad de las distribuciones bi-variadas.
+
+Si esto se da hay fuertes evidencias de que el vector distribuye multivariado aunque esto no siempre es cierto pero los casos en los que no, no son comunes.
+
+Se inicia el analisis exploratorio multivariado.
+```{r ,  fig.width=5, fig.height=4, fig.align='center', echo=FALSE}
+tabla1.8 <- read.table(paste(dir.input,"T1-8.DAT",sep=""),col.names = c("r_d", "r_nd", "h_d", "h_nd", "c_d", "c_nd"))
+tabla1.8 <- as_tibble(tabla1.8)
+
+# a) Análisis exploratorio multivariado ----
+glimpse(tabla1.8)
+summary(tabla1.8)
+```
+$\\$
+```{r ,  fig.align='center', echo=FALSE}
+boxplot(tabla1.8, varwidth = T)
+title(xlab = "Huseos lado dominante (d) y no dominante (nd)")
+title(ylab = "Contenido mineral")
+title(main = "Contenido mineral medido en los huesos")
+```
+```{r , fig.align='center', echo=FALSE}
+plot(density(tabla1.8$r_d),
+     xlim = c(0, 3),
+     ylim = c(0, 4),
+     main = "",
+     xlab = "",
+     ylab = "",
+     col = "royalblue")
+title(main = "Densidades estimadas de los contenidos minerales en los huesos")
+title(ylab = "Numero de muestras")
+title(xlab = "Densidad mineral del hueso")
+lines(density(tabla1.8$r_nd),
+      col = "royalblue4")
+lines(density(tabla1.8$h_d),
+      col = "seagreen")
+lines(density(tabla1.8$h_nd),
+      col = "seagreen1")
+lines(density(tabla1.8$c_d),
+      col = "tomato")
+lines(density(tabla1.8$c_nd),
+      col = "tomato4")
+legend(2.0, 4.0,
+       c("Radio (d)", "Radio (nd)", "Humero (d)",
+         "Humero (nd)", "Cubito (d)", "Cubito (nd)"),
+       lty = c(1,1,1,1),
+       col = c("royalblue", "royalblue4", "seagreen",
+               "seagreen1", "tomato", "tomato4"))
+```
+```{r ,  fig.width=6, fig.height=5, fig.align='center', echo=FALSE}
+rd_hist <- qplot(r_d, data = tabla1.8,
+                 geom = "histogram",
+                 binwidth = 0.05, xlim = c(0, 1.5),
+                 main = "Radio lado dominante",
+                 xlab = "Densidad del hueso",
+                 ylab = "Número de muestras")
+
+rnd_hist <- qplot(r_nd, data = tabla1.8,
+                  geom = "histogram",
+                  binwidth = 0.05, xlim = c(0, 1.5),
+                  main = "Radio lado no dominante",
+                  xlab = "Densidad del hueso",
+                  ylab = "Número de muestras")
+
+hd_hist <- qplot(h_d, data = tabla1.8,
+                 geom = "histogram",
+                 binwidth = 0.1, xlim = c(0, 3),
+                 main = "Húmero lado dominante",
+                 xlab = "Densidad del hueso",
+                 ylab = "Número de muestras")
+
+hnd_hist <- qplot(h_nd, data = tabla1.8,
+                  geom = "histogram",
+                  binwidth = 0.1, xlim = c(0, 3),
+                  main = "Húmero lado no dominante",
+                  xlab = "Densidad del hueso",
+                  ylab = "Número de muestras")
+
+cd_hist <- qplot(c_d, data = tabla1.8,
+                 geom = "histogram",
+                 binwidth = 0.1, xlim = c(0, 1.5),
+                 main = "Cúbito lado dominante",
+                 xlab = "Densidad del hueso",
+                 ylab = "Número de muestras")
+
+cnd_hist <- qplot(c_nd, data = tabla1.8,
+                  geom = "histogram",
+                  binwidth = 0.1, xlim = c(0, 1.5),
+                  main = "Cúbito lado no dominanto",
+                  xlab = "Densidad del hueso",
+                  ylab = "Número de muestras")
+
+histogramas <- multiplot(rd_hist, rnd_hist, 
+                         hd_hist, hnd_hist, 
+                         cd_hist, cnd_hist, 
+                         cols = 3)
+```
+Ahora realizaremos un análisis de normalidad univariable (marginales), con herramientas graficas:
+```{r ,  fig.width=8, fig.height=6, fig.align='center', echo=FALSE}
+# Diagnóstico gráfico
+par(mfrow = c(2, 3))
+qqnorm(tabla1.8$r_d,
+       main = "qq-plot Radio lado dominante",
+       xlab = "Cuantiles teoricos",
+       ylab = "Cuantiles muestrales")
+qqline(tabla1.8$r_d, col = "red")
+
+qqnorm(tabla1.8$c_d,
+       main = "qq-plot Cubito lado dominante",
+       xlab = "Cuantiles teoricos",
+       ylab = "Cuantiles muestrales")
+qqline(tabla1.8$c_d, col = "red")
+
+qqnorm(tabla1.8$h_d,
+       main = "qq-plot Humero lado dominante",
+       xlab = "Cuantiles teoricos",
+       ylab = "Cuantiles muestrales")
+qqline(tabla1.8$h_d, col = "red")
+
+qqnorm(tabla1.8$r_nd,
+       main = "qq-plot Radio lado no dominante",
+       xlab = "Cuantiles teoricos",
+       ylab = "Cuantiles muestrales")
+qqline(tabla1.8$r_nd, col = "red")
+
+qqnorm(tabla1.8$c_nd,
+       main = "qq-plot Cubito lado no dominante",
+       xlab = "Cuantiles teoricos",
+       ylab = "Cuantiles muestrales")
+qqline(tabla1.8$c_nd, col = "red")
+
+qqnorm(tabla1.8$h_nd,
+       main = "qq-plot Humero lado no dominante",
+       xlab = "Cuantiles teoricos",
+       ylab = "Cuantiles muestrales")
+qqline(tabla1.8$h_nd, col = "red")
+```
+```{r ,  fig.width=5, fig.height=4, fig.align='center', echo=FALSE}
+par(mfrow = c(1, 1))
+
+# Pruebas formales
+rd_shapiro <- shapiro.test(tabla1.8$r_d)
+rnd_shapiro <- shapiro.test(tabla1.8$r_nd)
+hd_shapiro <- shapiro.test(tabla1.8$h_d)
+hnd_shapiro <- shapiro.test(tabla1.8$h_nd)
+cd_shapiro <- shapiro.test(tabla1.8$c_d)
+cnd_shapiro <- shapiro.test(tabla1.8$c_nd)
+
+p.univariado <- c(rd_shapiro$p.value, rnd_shapiro$p.value,
+                  hd_shapiro$p.value, hnd_shapiro$p.value,
+                  cd_shapiro$p.value, cnd_shapiro$p.value)
+
+p.univariado <- as.data.frame(p.univariado)
+
+row.names(p.univariado) <- c("Radio dominante", "Radio no dominante",
+                             "Húmero dominante", "Húmero no dominante",
+                             "Cúbito dominante", "Cúbito no dominante")
+
+colnames(p.univariado) <- "p-valor"
+```
+De los diagnósticos (gráficos qqplot) y las pruebas formales (prueba de Shapiro-Wilk podemos concluir con un 95% de confianza que todas las seìs variables distribuyen normal univariado. El tamaño de muestra no es muy grande podemos considerarlo un tamaño medio por lo que el resultado del valor p de la prueba de shapiro-wilk para la población Radio dominante lo aceptamos así sea muy cerca al 0.05 ya que al ser un tamaño de muestra pequeño o medio los resultados son muy ajustados, posiblemente las observaciones extremas distorsionan la prueba.)
+
+Ahora realizaremos un analisis de la normalidad bivariable:
+```{r ,  fig.align='center', echo=FALSE}
+# c) Análisis de la normalidad bivariable ----
+pairs(tabla1.8)
+```
+```{r ,  fig.width=5, fig.height=8, fig.align='center', echo=FALSE}
+par(mfrow = c(4,2))
+rd_rnd <- mardiaTest(tabla1.8[, c(1, 2)], qqplot = TRUE)
+rd_hd <- mardiaTest(tabla1.8[, c(1, 3)], qqplot = TRUE)
+rd_hnd <- mardiaTest(tabla1.8[, c(1, 4)], qqplot = TRUE)
+rd_cd <- mardiaTest(tabla1.8[, c(1, 5)], qqplot = TRUE)
+rd_cnd <- mardiaTest(tabla1.8[, c(1, 6)], qqplot = TRUE)
+rnd_hd <- mardiaTest(tabla1.8[, c(2, 3)], qqplot = TRUE)
+rnd_hnd <- mardiaTest(tabla1.8[, c(2, 4)], qqplot = TRUE)
+rnd_cd <- mardiaTest(tabla1.8[, c(2, 5)], qqplot = TRUE)
+```
+
+```{r ,  fig.width=5, fig.height=8, fig.align='center', echo=FALSE}
+par(mfrow = c(4,2))
+rnd_cnd <- mardiaTest(tabla1.8[, c(2, 6)], qqplot = TRUE)
+hd_hnd <- mardiaTest(tabla1.8[, c(3, 4)], qqplot = TRUE)
+hd_cd <- mardiaTest(tabla1.8[, c(3, 5)], qqplot = TRUE)
+hd_cnd <- mardiaTest(tabla1.8[, c(3, 6)], qqplot = TRUE)
+hnd_cd <- mardiaTest(tabla1.8[, c(4, 5)], qqplot = TRUE)
+hnd_cnd <- mardiaTest(tabla1.8[, c(4, 6)], qqplot = TRUE)
+cd_cnd <- mardiaTest(tabla1.8[, c(5, 6)], qqplot = TRUE)
+```
+
+```{r ,  fig.width=5, fig.height=8, fig.align='center', echo=FALSE}
+par(mfrow = c(4 ,2))
+mvnPlot(rd_rnd,
+        type = "contour",
+        default = FALSE,
+        plotCtrl = contourControl(nlevels = 10,
+                                  xlab = "Radio dominante",
+                                  ylab = "Radio no dominante"))
+
+mvnPlot(rd_hd,
+        type = "contour",
+        default = FALSE,
+        plotCtrl = contourControl(nlevels = 10,
+                                  xlab = "Radio dominante",
+                                  ylab = "Húmero dominante"))
+
+mvnPlot(rd_hnd,
+        type = "contour",
+        default = FALSE,
+        plotCtrl = contourControl(nlevels = 10,
+                                  xlab = "Radio dominante",
+                                  ylab = "Húmero no dominante"))
+
+mvnPlot(rd_cd,
+        type = "contour",
+        default = FALSE,
+        plotCtrl = contourControl(nlevels = 10,
+                                  xlab = "Radio dominante",
+                                  ylab = "Cúbito dominante"))
+
+mvnPlot(rd_cnd,
+        type = "contour",
+        default = FALSE,
+        plotCtrl = contourControl(nlevels = 10,
+                                  xlab = "Radio dominante",
+                                  ylab = "Cúbito no dominante"))
+
+mvnPlot(rnd_hd,
+        type = "contour",
+        default = FALSE,
+        plotCtrl = contourControl(nlevels = 10,
+                                  xlab = "Radio no dominante",
+                                  ylab = "Húmero dominante"))
+
+mvnPlot(rnd_hnd,
+        type = "contour",
+        default = FALSE,
+        plotCtrl = contourControl(nlevels = 10,
+                                  xlab = "Radio no dominante",
+                                  ylab = "Húmero no dominante"))
+
+mvnPlot(rnd_cd,
+        type = "contour",
+        default = FALSE,
+        plotCtrl = contourControl(nlevels = 10,
+                                  xlab = "Radio no dominante",
+                                  ylab = "Cúbito dominante"))
+```
+
+```{r ,  fig.width=5, fig.height=8, fig.align='center', echo=FALSE}
+par(mfrow = c(4 ,2))
+mvnPlot(rnd_cnd,
+        type = "contour",
+        default = FALSE,
+        plotCtrl = contourControl(nlevels = 10,
+                                  xlab = "Radio no dominante",
+                                  ylab = "Cúbito no dominante"))
+
+mvnPlot(hd_hnd,
+        type = "contour",
+        default = FALSE,
+        plotCtrl = contourControl(nlevels = 10,
+                                  xlab = "Húmero dominante",
+                                  ylab = "Húmero no dominante"))
+
+mvnPlot(hd_cd,
+        type = "contour",
+        default = FALSE,
+        plotCtrl = contourControl(nlevels = 10,
+                                  xlab = "Húmero dominante",
+                                  ylab = "Cúbito dominante"))
+
+mvnPlot(hd_cnd,
+        type = "contour",
+        default = FALSE,
+        plotCtrl = contourControl(nlevels = 10,
+                                  xlab = "Húmero dominante",
+                                  ylab = "Cúbito no dominante"))
+
+mvnPlot(hnd_cd,
+        type = "contour",
+        default = FALSE,
+        plotCtrl = contourControl(nlevels = 10,
+                                  xlab = "Húmero no dominante",
+                                  ylab = "Cúbito dominante"))
+
+mvnPlot(hnd_cnd,
+        type = "contour",
+        default = FALSE,
+        plotCtrl = contourControl(nlevels = 10,
+                                  xlab = "Húmero no dominante",
+                                  ylab = "Cúbito no dominante"))
+
+mvnPlot(cd_cnd,
+        type = "contour",
+        default = FALSE,
+        plotCtrl = contourControl(nlevels = 10,
+                                  xlab = "Cúbito dominante",
+                                  ylab = "Cúbito no dominante"))
+```
+```{r ,  fig.width=5, fig.height=8, fig.align='center', echo=FALSE}
+par(mfrow =c(1,1))
+
+bivariados <- c("Radio_d - Radio_nd",
+                "Radio_d - Húmero_d",
+                "Radio_d - Húmero_nd",
+                "Radio_d - Cúbito_d",
+                "Radio_d - Cúbito_nd",
+                "Radio_nd - Húmero_d",
+                "Radio_nd - Húmero_nd",
+                "Radio_nd - Cúbito_d",
+                "Radio_nd - Cúbito_nd",
+                "Húmero_d - Húmero_nd",
+                "Húmero_d - Cúbito_d",
+                "Húmero_d - Cúbito_nd",
+                "Húmero_nd - Cúbito_d",
+                "Húmero_nd - Cúbito_nd",
+                "Cúbito_d - Cúbito_nd")
+
+p.value.kurt <- c(rd_rnd@p.value.kurt,
+                  rd_hd@p.value.kurt,
+                  rd_hnd@p.value.kurt,
+                  rd_cd@p.value.kurt,
+                  rd_cnd@p.value.kurt,
+                  rnd_hd@p.value.kurt,
+                  rnd_hnd@p.value.kurt,
+                  rnd_cd@p.value.kurt,
+                  rnd_cnd@p.value.kurt,
+                  hd_hnd@p.value.kurt,
+                  hd_cd@p.value.kurt,
+                  hd_cnd@p.value.kurt,
+                  hnd_cd@p.value.kurt,
+                  hnd_cnd@p.value.kurt,
+                  cd_cnd@p.value.kurt)
+
+p.value.skew <- c(rd_rnd@p.value.skew,
+                  rd_hd@p.value.skew,
+                  rd_hnd@p.value.skew,
+                  rd_cd@p.value.skew,
+                  rd_cnd@p.value.skew,
+                  rnd_hd@p.value.skew,
+                  rnd_hnd@p.value.skew,
+                  rnd_cd@p.value.skew,
+                  rnd_cnd@p.value.skew,
+                  hd_hnd@p.value.skew,
+                  hd_cd@p.value.skew,
+                  hd_cnd@p.value.skew,
+                  hnd_cd@p.value.skew,
+                  hnd_cnd@p.value.skew,
+                  cd_cnd@p.value.skew)
+
+p.value.small <- c(rd_rnd@p.value.small,
+                  rd_hd@p.value.small,
+                  rd_hnd@p.value.small,
+                  rd_cd@p.value.small,
+                  rd_cnd@p.value.small,
+                  rnd_hd@p.value.small,
+                  rnd_hnd@p.value.small,
+                  rnd_cd@p.value.small,
+                  rnd_cnd@p.value.small,
+                  hd_hnd@p.value.small,
+                  hd_cd@p.value.small,
+                  hd_cnd@p.value.small,
+                  hnd_cd@p.value.small,
+                  hnd_cnd@p.value.small,
+                  cd_cnd@p.value.small)
+
+normalidad.bivariada <- data.frame(bivariados, p.value.kurt, p.value.skew, p.value.small)
+```
+Para evaluar la normalidad bivariada primero graficamos los pares de variables como diagnóstico gráfico y observar una distribución elipsoide de los datos pero la gráfica no es muy clara en muchos casos por lo que procedimos entonces a aplicar la prueba de normalidad de Mardia donde se prueba la kurtosis y la asimetría y se crean pruebas de hipótesis donde la hipótesis nula es que los datos distribuyen normales bivariados, se rechaza dicha hipótesis si los valores p calculados son menores que un alpha del $0.05$. De los datos calculados en normalidad.bivariada vemos que las distribuciones Radio_dominante-Radio_no_dominante y Radio_dominante-Cúbito_no_dominante tienen valores p tanto para kurtosis y asimetría son menores del $0.05$ y junto con el gráfico qq-plot chicuadrado establecemos que no son normales bivariados. Adicionalmente calculamos el valor p para muestras pequeñas ya que apenas contamos con 25 observaciones que puede ser un valor no tan grande. Con el valor p para muestras pequeñas ratificamos lo analizado para las distribuciones adio_dominante-Radio_no_dominante y Radio_dominante-Cúbito_no_dominante pero aparece la distribución Radio_no_dominante-Húmero_dominante pero al analizar los valore p para kurtosis y asimetría vemos que son bastante altos por lo que no rechazamos la hipótesis de normalidad bivariada.
+### Punto 4.35
+Examine los datos de las medidas de la calidad del papel de la tabla 1.2 para marginales y normalidad multivariada.
+```{r , fig.align='center', echo=FALSE}
+density <- read.table(paste(dir.input,"T1-2.DAT",sep=""))$V1
+machineDirection <- read.table(paste(dir.input,"T1-2.DAT",sep=""))$V2
+crossDirection <- read.table(paste(dir.input,"T1-2.DAT",sep=""))$V3
+
+#names(tabla1.2) <- c("Density",
+#                     "Machine direction",
+#                     "Cross direction")
+
+#pairs(tabla1.2)
+
+par(mfrow=c(1,3))
+qqd <- qqnorm(density)
+qqline(density,col="red")
+qqm <- qqnorm(machineDirection)
+qqline(machineDirection,col="red")
+qqc <- qqnorm(crossDirection)
+qqline(crossDirection,col="red")
+```
+```{r , fig.align='center', echo=FALSE}
+plot(crossDirection)
+```
+```{r , fig.align='center', echo=FALSE}
+par(mfrow=c(1,3))
+data1 <- cbind(density,machineDirection)
+p1 <- roystonTest(data1, qqplot = T)
+data2 <- cbind(density,crossDirection)
+p2 <- roystonTest(data2, qqplot = T)
+data3 <- cbind(machineDirection,crossDirection)
+p3 <- roystonTest(data3, qqplot = T)
+```
+```{r , fig.align='center', echo=FALSE}
+data4 <- cbind(density,machineDirection,crossDirection)
+p4 <- roystonTest(data4, qqplot = T)
+```
+### Punto 4.36
+Examine los datos sobre records de trayectorias nacional de mujeres de la tabla 1.9 para marginales y normalidad multivariada.
+```{r , fig.align='center', echo=FALSE}
+tabla1.9 <- read.table(paste(dir.input,"T1-9.dat",sep=""),sep="\t")
+names(tabla1.9) <- c("Country",
+                     "100m (s)",
+                     "200m (s)",
+                     "400m (s)",
+                     "800m (min)",
+                     "1500m (min)",
+                     "3000m (min)",
+                     "Marathon (min)")
+
+pairs(tabla1.9[, 2:8])
+```
+
+## REFERENCIAS
+
+
+
+
+
+
+
+
+
+
+
+
